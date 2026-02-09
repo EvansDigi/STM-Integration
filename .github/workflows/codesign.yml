@@ -1,1 +1,36 @@
+name: DigiCert Code Signing Test
 
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Recreate SM client certificate
+        shell: bash
+        run: |
+          echo "${{ secrets.SM_CLIENT_CERT_FILE_B64 }}" | base64 --decode > sm_client_cert.p12
+
+      - name: Setup DigiCert Software Trust Manager
+        uses: digicert/code-signing-software-trust-action@v1
+        with:
+          SM_HOST: ${{ vars.SM_HOST }}
+          SM_API_KEY: ${{ secrets.SM_API_KEY }}
+          SM_CLIENT_CERT_FILE: sm_client_cert.p12
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
+
+      - name: Create test artifact
+        run: |
+          echo "Hello DigiCert STM" > hello.txt
+
+      - name: Sign artifact
+        run: |
+          smctl sign \
+            --input hello.txt \
+            --output hello.txt.signed
