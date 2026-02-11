@@ -1,22 +1,25 @@
-name: DigiCert Code Signing Test
+name: Build and Sign EXE with DigiCert STM
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
-  sign:
-    runs-on: ubuntu-latest
+  build-and-sign:
+    runs-on: windows-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Recreate client auth certificate from GitHub Secret
       - name: Recreate SM client certificate
         shell: bash
         run: |
-          echo "${{ secrets.SM_CLIENT_CERT_FILE_B64 }}" | base64 --decode > sm_client_cert.p12
+          echo "${{ secrets.SM_CLIENT_CERT_FILE_B64 }}" | tr -d '\r\n' | base64 --decode > sm_client_cert.p12
 
+      # Setup DigiCert Software Trust Manager
       - name: Setup DigiCert Software Trust Manager
         uses: digicert/code-signing-software-trust-action@main
         with:
@@ -25,13 +28,23 @@ jobs:
           SM_CLIENT_CERT_FILE: sm_client_cert.p12
           SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
 
-      - name: Create test artifact
+      # Build a simple Windows EXE
+      - name: Build test EXE
+        shell: pwsh
         run: |
-          echo "Hello DigiCert STM" > hello.txt
+          @"
+          using System;
+          class Program {
+              static void Main() {
+                  Console.WriteLine("Hello DigiCert STM!");
+              }
+          }
+          "@ | Out-File Program.cs
 
-      - name: Duplicate artifact
-        run: cp hello.txt hello-to-sign.txt
+          csc Program.cs
 
-      - name: Sign artifact
-        run: smctl sign --input hello-to-sign.txt
-
+      # Sign EXE using keypair alias
+      - name: Sign EXE with keypair alias
+        shell: bash
+        run: |
+          smctl sign --keypair-alias "PrivateKeyPair" --input Program.exe
