@@ -13,7 +13,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1) Build a real Windows EXE (single-file)
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -30,8 +29,6 @@ jobs:
           }
           Write-Host "Built: out\HelloSTM.exe"
 
-      # 2) Recreate the STM client cert file on the runner from Base64 secret
-      #    (so it can be used as MFA client authentication cert)
       - name: Write SM client certificate to disk
         shell: pwsh
         run: |
@@ -41,21 +38,32 @@ jobs:
 
           if (!(Test-Path $p12Path)) { throw "Client cert file was not created: $p12Path" }
 
-          # Persist path for later steps
           "SM_CLIENT_CERT_FILE=$p12Path" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
           Write-Host "Client cert written to: $p12Path"
 
-      # 3) Quick sanity check (no secrets printed)
-      - name: Debug STM env (safe)
+      # Deterministic debug: use the SAME env vars smctl will use
+      - name: Debug STM env + validate client-auth cert (safe)
         shell: pwsh
+        env:
+          SM_HOST: ${{ secrets.SM_HOST }}
+          SM_API_KEY: ${{ secrets.SM_API_KEY }}
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
+          SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
         run: |
-          if ("${{ secrets.SM_HOST }}") { Write-Host "SM_HOST is set (from secrets)" } else { throw "SM_HOST secret is missing/empty" }
-          if ("${{ secrets.SM_API_KEY }}") { Write-Host "SM_API_KEY is set (from secrets)" } else { throw "SM_API_KEY secret is missing/empty" }
-          if ($env:SM_CLIENT_CERT_FILE) { Write-Host "SM_CLIENT_CERT_FILE is set: $env:SM_CLIENT_CERT_FILE" } else { throw "SM_CLIENT_CERT_FILE missing" }
-          if (Test-Path $env:SM_CLIENT_CERT_FILE) { Write-Host "Client cert file exists" } else { throw "Client cert file not found" }
+          if ([string]::IsNullOrWhiteSpace($env:SM_HOST)) { throw "SM_HOST secret is missing/empty" }
+          if ($env:SM_HOST -notmatch "clientauth") { throw "SM_HOST must be a clientauth URL (mTLS/MFA). Current value doesn't contain 'clientauth'." }
+          if ([string]::IsNullOrWhiteSpace($env:SM_API_KEY)) { throw "SM_API_KEY secret is missing/empty" }
+          if ([string]::IsNullOrWhiteSpace($env:SM_CLIENT_CERT_PASSWORD)) { throw "SM_CLIENT_CERT_PASSWORD secret is missing/empty" }
+          if ([string]::IsNullOrWhiteSpace($env:SM_CLIENT_CERT_FILE)) { throw "SM_CLIENT_CERT_FILE env is missing" }
+          if (!(Test-Path $env:SM_CLIENT_CERT_FILE)) { throw "Client cert file not found at $env:SM_CLIENT_CERT_FILE" }
 
-      # 4) Setup STM + Sign using the DigiCert GitHub Action (simple signing mode)
-      #    The action expects SM_HOST / SM_API_KEY / SM_CLIENT_CERT_FILE / SM_CLIENT_CERT_PASSWORD. :contentReference[oaicite:1]{index=1}
+          Write-Host "SM_HOST is set"
+          Write-Host "Client cert file exists"
+
+          # Safe inspection: show that the P12 contains a cert intended for client auth
+          # (this prints EKU and subject; no private key is output)
+          certutil -dump $env:SM_CLIENT_CERT_FILE | Select-String -Pattern "Enhanced Key Usage|Client Authentication|Subject:|Issuer:" -Context 0,2
+
       - name: Setup Software Trust Manager + Sign
         uses: digicert/code-signing-software-trust-action@main
         with:
@@ -68,7 +76,6 @@ jobs:
           SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
           SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
 
-      # 5) Upload artifacts so you can download the signed EXE from the run
       - name: Upload signed EXE
         uses: actions/upload-artifact@v4
         with:
