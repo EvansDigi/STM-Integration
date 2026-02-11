@@ -37,7 +37,7 @@ jobs:
 
       # IMPORTANT: Provide input + keypair-alias so the action invokes smctl itself
       - name: Setup Software Trust Manager + Sign
-        uses: digicert/code-signing-software-trust-action@v1
+        uses: digicert/code-signing-software-trust-action@main
         with:
           simple-signing-mode: true
           input: out/HelloSTM.exe
