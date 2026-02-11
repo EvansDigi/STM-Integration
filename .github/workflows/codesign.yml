@@ -51,4 +51,4 @@ jobs:
       - name: Sign EXE with keypair alias
         shell: bash
         run: |
-          smctl sign --keypair-alias "<YOUR_KEYPAIR_ALIAS>" --input "out/HelloSTM.exe"
+          smctl sign --keypair-alias "PrivateKeyPair" --input "out/HelloSTM.exe"
