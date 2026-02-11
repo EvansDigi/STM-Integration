@@ -28,23 +28,27 @@ jobs:
           SM_CLIENT_CERT_FILE: sm_client_cert.p12
           SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
 
-      # Build a simple Windows EXE
+      # Ensure .NET SDK is available
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # Create and build a tiny console EXE
       - name: Build test EXE
         shell: pwsh
         run: |
-          @"
-          using System;
-          class Program {
-              static void Main() {
-                  Console.WriteLine("Hello DigiCert STM!");
-              }
+          dotnet new console -n HelloSTM -o HelloSTM
+          dotnet publish HelloSTM -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o out
+
+          if (!(Test-Path "out\HelloSTM.exe")) {
+            Write-Host "Build output contents:"
+            Get-ChildItem -Recurse out
+            throw "Expected out\HelloSTM.exe was not found."
           }
-          "@ | Out-File Program.cs
 
-          csc Program.cs
-
-      # Sign EXE using keypair alias
+      # Sign EXE using keypair alias (required by SMCTL)
       - name: Sign EXE with keypair alias
         shell: bash
         run: |
-          smctl sign --keypair-alias "PrivateKeyPair" --input Program.exe
+          smctl sign --keypair-alias "<YOUR_KEYPAIR_ALIAS>" --input "out/HelloSTM.exe"
