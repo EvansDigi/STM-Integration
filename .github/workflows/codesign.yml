@@ -29,8 +29,9 @@ jobs:
         run: |
           echo "Hello DigiCert STM" > hello.txt
 
+      - name: Duplicate artifact
+        run: cp hello.txt hello-to-sign.txt
+
       - name: Sign artifact
-        run: |
-          smctl sign \
-            --input hello.txt \
-            --output hello.txt.signed
+        run: smctl sign --input hello-to-sign.txt
+
