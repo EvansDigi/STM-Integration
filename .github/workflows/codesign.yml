@@ -64,24 +64,21 @@ jobs:
           # (this prints EKU and subject; no private key is output)
           certutil -dump $env:SM_CLIENT_CERT_FILE | Select-String -Pattern "Enhanced Key Usage|Client Authentication|Subject:|Issuer:" -Context 0,2
 
-      - name: Diagnose mTLS inputs (safe)
+      - name: Verify P12 contains Client Authentication cert (safe)
         shell: pwsh
         env:
-          SM_HOST: ${{ secrets.SM_HOST }}
           SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
           SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
         run: |
-          # 1) Confirm SM_HOST is set and looks like a clientauth endpoint
-          if ([string]::IsNullOrWhiteSpace($env:SM_HOST)) { throw "SM_HOST is empty" }
-          if ($env:SM_HOST -match "clientauth") { Write-Host "✅ SM_HOST contains 'clientauth' (good for mTLS)" } else { Write-Host "❌ SM_HOST does NOT contain 'clientauth' (likely wrong endpoint)" }
+          if (!(Test-Path $env:SM_CLIENT_CERT_FILE)) { throw "Missing P12 at $env:SM_CLIENT_CERT_FILE" }
       
-          # 2) Confirm the P12 exists
-          if (!(Test-Path $env:SM_CLIENT_CERT_FILE)) { throw "Client cert file missing at $env:SM_CLIENT_CERT_FILE" }
-          Write-Host "✅ Client cert file exists"
+          # Use OpenSSL (available via Git on windows-latest) to inspect the cert inside the P12
+          $openssl = "C:\Program Files\Git\usr\bin\openssl.exe"
+          if (!(Test-Path $openssl)) { $openssl = "openssl" }
       
-          # 3) Check if the cert INSIDE the P12 is intended for Client Authentication (EKU)
-          # (safe output: prints EKU lines only, no private key)
-          certutil -dump $env:SM_CLIENT_CERT_FILE | Select-String -Pattern "Enhanced Key Usage|Client Authentication" -Context 0,2
+          & $openssl pkcs12 -in $env:SM_CLIENT_CERT_FILE -nokeys -passin pass:$env:SM_CLIENT_CERT_PASSWORD |
+            Select-String -Pattern "Subject:|Issuer:|X509v3 Extended Key Usage|Client Authentication" -Context 0,2
+
 
       - name: Setup Software Trust Manager + Sign
         uses: digicert/code-signing-software-trust-action@main
