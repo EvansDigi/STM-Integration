@@ -46,7 +46,7 @@ jobs:
           if ($env:SM_CLIENT_CERT_FILE) { Write-Host "SM_CLIENT_CERT_FILE is set" } else { throw "SM_CLIENT_CERT_FILE missing" }
           if (Test-Path $env:SM_CLIENT_CERT_FILE) { Write-Host "Client cert file exists" } else { throw "Client cert file not found" }
         env:
-          SM_HOST: ${{ vars.SM_HOST }}
+          SM_HOST: ${{ secrets.SM_HOST }}
           SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
 
       # IMPORTANT: Provide input + keypair-alias so the action invokes smctl itself
